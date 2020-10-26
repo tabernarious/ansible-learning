@@ -2,10 +2,110 @@
 https://docs.ansible.com/ansible/2.9/user_guide/vault.html
 https://docs.ansible.com/ansible/latest/user_guide/vault.html
 
-## `--vault-id [[label]@][source]`
-Label passwords when storing them (plaintext files, password vaults, etc.). Then reference the label when encrypting and decrypting content. The label, but not the source (e.g. password file path, script, or `prompt`) is shown in plaintext with the encrypted content to help identify which password was used.
+The `ansible-vault` package provides mechanisms to encrypt files and strings for later use with `ansible` (ad hoc) and `ansible-playbook` commands. To encrypt and decrypt content you need one of the following:
+1. A script that fetches passwords.
+1. Plaintext file(s) each containing a password* that can be referenced.
+1. A password that can be typed/pasted into a prompt every time encrypt/decrypt is needed.
 
-A password label can be duplicated in separate password files, so be careful. 
+\* Starting in Ansible 2.10, multiple passwords can be kept in one plaintext file by using vault-id labels.
+
+https://docs.ansible.com/ansible/2.10/user_guide/vault.html#storing-passwords-in-files
+
+## `vault_password_file` - Parameter in `/etc/ansible/ansible.cfg`
+The `vault_password_file` parameter specifies the location of the default vault password. This password file will be used when no other passwords have been referenced (files, scripts, prompt, etc.).
+
+```ini
+$ grep -i "vault_password_file" /etc/ansible/ansible.cfg -B2
+
+## If set, configures the path to the Vault password file as an alternative to
+# specifying --vault-password-file on the command line.
+vault_password_file = /home/thor/playbooks/vault_pass.txt
+```
+
+## `create` - Create a new (empty) vault-encrypted file
+```
+$ ansible-vault create inventory.txt
+```
+
+## `edit` - Edit a vault-encrypted file (in place)
+```
+$ ansible-vault edit inventory.txt
+```
+
+## `encrypt_string` - Encrypt a string
+Encrypt a string in-line (ONLY USE FOR TESTING; string will be present in shell history).
+```
+$ ansible-vault encrypt_string --vault-id prod@passfile 'this is my string' --name mystring
+
+mystring: !vault |
+      $ANSIBLE_VAULT;1.1;AES256;prod
+      62313365396662343061393464336163383764373764613633653634306231386433626436623361
+      6134333665353966363534333632666535333761666131620a663537646436643839616531643561
+      63396265333966386166373632626539326166353965363262633030333630313338646335303630
+      3438626666666137650a353638643435666633633964366338633066623234616432373231333331
+      6564
+```
+
+Pipe a string to `ansible-vault encrypt_string` using `echo`  (ONLY USE FOR TESTING; string will be present in shell history).
+```
+$ echo -n 'letmein' | ansible-vault encrypt_string --vault-id test@a_password_file --stdin-name 'test_db_password'
+```
+
+Prompt for a string to be encrypted.
+```
+$ ansible-vault encrypt_string --vault-id prod@passfile --stdin-name 'mystring'
+
+Reading plaintext input from stdin. (ctrl-d to end input, twice if your content does not already have a new line)
+```
+
+## `rekey` - Change password on existing vault-encrypted file(s)
+```
+$ ansible-vault rekey file1.txt file2.txt file3.txt
+```
+
+## `decrypt` - Decrypt file using password file
+```
+$ ansible-vault decrypt ~/playbooks/decrypt_me.yml --vault-password-file ~/playbooks/vault_pass.txt
+Decryption successful
+```
+
+## `--ask-vault-password`
+Ansible will prompt for vault password.
+
+```
+$ ansible-playbook playbook.yml --ask-vault-password
+```
+
+## `--ask-vault-file`
+Ansible will prompt for vault file path.
+
+```
+$ ansible-playbook playbook.yml --ask-vault-file
+```
+
+## `--vault-password-file` - Run playbook with a password file reference
+```
+$ ansible-playbook -i inventory copy_secrets.yml --vault-password-file ~/playbooks/vault_pass.txt
+
+PLAY [Copy secrets file to all hosts] *************************************
+
+TASK [Gathering Facts] ****************************************************
+ok: [web1]
+ok: [web2]
+
+TASK [Copy secrets file to host] ******************************************
+changed: [web2]
+changed: [web1]
+
+PLAY RECAP ****************************************************************
+web1                       : ok=2    changed=1    unreachable=0    failed=0
+web2                       : ok=2    changed=1    unreachable=0    failed=0
+```
+
+## `--vault-id [[label]@][source]`
+The `vault-id` is a way to label encrypted content with a reference to the ansible-vault password used. The label is listed in plaintext with the content, not with the passwords, so be sure the label clearly identifies the password.
+
+The content does not contain any reference to the password `source` (file path, script path, etc.), so, again, be sure the label clearly identifies the password. Starting in Ansible 2.10 there is a way to label passwords for even easier matching of content to passwords.
 
 ***
 
@@ -144,41 +244,14 @@ $ ansible-playbook -i inventory --ask-vault-password
 
 ***
 
-## `create` - Create a new (empty) vault-encrypted file
+### Referencing multiple passwords
+Multiple password files can be referenced with additional `--vault-id` arguments.
+
 ```
-$ ansible-vault create inventory.txt
+$ ansible-playbook -i inventory --vault-id prod@passfile_prod --vault-id dev@passfile_dev
 ```
 
-## `edit` - Edit a vault-encrypted file (in place)
-```
-$ ansible-vault edit inventory.txt
-```
-
-## `encrypt_string` Encrypt a string
-Encrypt a string in-line (ONLY USE FOR TESTING; string will be present in shell history).
-```
-$ ansible-vault encrypt_string --vault-id prod@passfile 'this is my string' --name mystring
-
-mystring: !vault |
-      $ANSIBLE_VAULT;1.1;AES256;prod
-      62313365396662343061393464336163383764373764613633653634306231386433626436623361
-      6134333665353966363534333632666535333761666131620a663537646436643839616531643561
-      63396265333966386166373632626539326166353965363262633030333630313338646335303630
-      3438626666666137650a353638643435666633633964366338633066623234616432373231333331
-      6564
-```
-
-Pipe a string to `ansible-vault encrypt_string` using `echo`  (ONLY USE FOR TESTING; string will be present in shell history).
-```
-$ echo -n 'letmein' | ansible-vault encrypt_string --vault-id test@a_password_file --stdin-name 'test_db_password'
-```
-
-Prompt for a string to be encrypted.
-```
-$ ansible-vault encrypt_string --vault-id prod@passfile --stdin-name 'mystring'
-
-Reading plaintext input from stdin. (ctrl-d to end input, twice if your content does not already have a new line)
-```
+***
 
 ## Running a playbook with encrypted data
 
@@ -239,78 +312,101 @@ $ cat notsosecretmessage.txt
 abc123
 ```
 
-## `rekey` - Change password on existing vault-encrypted file(s)
-```
-$ ansible-vault rekey file1.txt file2.txt file3.txt
-```
+## Running a playbook with various data encrypted by multiple vault passwords
 
-## `decrypt` - Decrypt file using password file
-```
-$ ansible-vault decrypt ~/playbooks/decrypt_me.yml --vault-password-file ~/playbooks/vault_pass.txt
-Decryption successful
-```
-
-## `--ask-vault-password`
-Ansible will prompt for vault password.
+Starting files: `passfile_prod`, `sensitiveProdInfo.txt`, `passfile_dev`, `sensitiveDevInfo.txt`
 
 ```
-$ ansible-playbook playbook.yml --ask-vault-password
+$ cat passfile_prod
+notsosecret!123A
+
+$ cat sensitiveProdInfo.txt
+prodinfo: This is all my sensitive PROD info!
+
+$ cat passfile_dev
+dev_notsosecret@456B
+
+$ cat sensitiveDevInfo.txt
+devinfo: This is all my sensitive DEV info!
 ```
 
-## `--ask-vault-file`
-Ansible will prompt for vault file path.
-
+Encrypt Files
 ```
-$ ansible-playbook playbook.yml --ask-vault-file
-```
+$ ansible-vault encrypt sensitiveProdInfo.txt --vault-id prod@passfile_prod
+Encryption successful
 
-## `--vault-password-file` - Run playbook with a password file reference
-```
-$ ansible-playbook -i inventory copy_secrets.yml --vault-password-file ~/playbooks/vault_pass.txt
+$ cat sensitiveProdInfo.txt
+$ANSIBLE_VAULT;1.2;AES256;prod
+39346663353561353863633036386338336632313634313931313435323135633230623631373237
+3536623466333963333330343466326338633763313939340a666638363238623334623933613430
+64393430356634323662653864323761336663626233326337643337313864303866336631313962
+3235643664316337300a383431336535303039663538363339316330313032326239336366396338
+61363338623166333562346430636565366230363164333863303431376239383565343030313965
+3033313334346564636366333430663664356465356666663437
 
-PLAY [Copy secrets file to all hosts] *************************************
 
-TASK [Gathering Facts] ****************************************************
-ok: [web1]
-ok: [web2]
+$ ansible-vault encrypt sensitiveDevInfo.txt --vault-id dev@passfile_dev
+Encryption successful
 
-TASK [Copy secrets file to host] ******************************************
-changed: [web2]
-changed: [web1]
-
-PLAY RECAP ****************************************************************
-web1                       : ok=2    changed=1    unreachable=0    failed=0
-web2                       : ok=2    changed=1    unreachable=0    failed=0
-```
-
-## `vault_password_file` - View parameter in `/etc/ansible/ansible.cfg`
-Setting the `vault_password_file` parameter creates a default location to look for a vault password when encrypting and decrypting data with `ansible-vault` and `ansible-playbook`.
-
-```ini
-$ grep -i "vault_password_file" /etc/ansible/ansible.cfg -B2
-
-## If set, configures the path to the Vault password file as an alternative to
-# specifying --vault-password-file on the command line.
-vault_password_file = /home/thor/playbooks/vault_pass.txt
+$ cat sensitiveDevInfo.txt
+$ANSIBLE_VAULT;1.2;AES256;dev
+66326239313139363036633964396465653564313962373138633236663462653938323032373935
+3833353639666362353735366339393262303263313662340a646566333535346338343235643431
+36326632313632303862393636356239333235303966366135306530393132613239366337303539
+6335623731393538340a326365313833363863666637356138633330646332653462383161376664
+37343866323264383835343832626531643132303639656137313466633931653765653139616631
+6437616534623836623835313531633534356432316663356661
 ```
 
-## Run playbook with a password file referenced in `/etc/ansible/ansible.cfg`
+Playbook
+```yaml
+# decrypt_with_multiple_passwords.yml
+- name: View encrypted data
+  hosts: localhost
+  vars_files:
+    - sensitiveProdInfo.txt
+    - sensitiveDevInfo.txt
+  tasks:
+    - name: Show prod info
+      debug:
+        var: prodinfo
+
+    - name: Show dev info
+      debug:
+        var: devinfo
 ```
-$ ansible-playbook -i inventory copy_secrets.yml
 
-PLAY [Copy secrets file to all hosts] *************************************
+Playbook attempts with and without vault passwords
 
-TASK [Gathering Facts] ***************************************************************************
-ok: [web2]
-ok: [web1]
+```
+$ ansible-playbook decrypt_with_multiple_passwords.yml
+ERROR! Attempting to decrypt but no vault secrets found
 
-TASK [Copy secrets file to host] ***************************************************************************
-ok: [web1]
-ok: [web2]
+$ ansible-playbook decrypt_with_multiple_passwords.yml --vault-id prod@passfile_prod
+ERROR! Decryption failed (no vault secrets were found that could decrypt) on /home/danielt/ansible/sensitiveDevInfo.txt
 
-PLAY RECAP ****************************************************************
-web1                       : ok=2    changed=0    unreachable=0    failed=0
-web2                       : ok=2    changed=0    unreachable=0    failed=0
+$ ansible-playbook decrypt_with_multiple_passwords.yml --vault-id dev@passfile_dev
+ERROR! Decryption failed (no vault secrets were found that could decrypt) on /home/danielt/ansible/sensitiveProdInfo.txt
+
+$ ansible-playbook decrypt_with_multiple_passwords.yml --vault-id prod@passfile_prod --vault-id dev@passfile_dev
+
+PLAY [View encrypted data] ****************************************************
+
+TASK [Gathering Facts] ********************************************************
+ok: [localhost]
+
+TASK [Show prod info] *********************************************************
+ok: [localhost] => {
+    "prodinfo": "This is all my sensitive PROD info!"
+}
+
+TASK [Show dev info] **********************************************************
+ok: [localhost] => {
+    "devinfo": "This is all my sensitive DEV info!"
+}
+
+PLAY RECAP ********************************************************************
+localhost                  : ok=3    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
 ```
 
 ## `no_log` for censoring sensitive output
@@ -371,7 +467,7 @@ changed: [localhost] => {"censored": "the output has been hidden due to the fact
 
 PLAY RECAP *********************************************************************
 localhost                  : ok=2    changed=1    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
-
 ```
+
 ## Default cipher
 AES256

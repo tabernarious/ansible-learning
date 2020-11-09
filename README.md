@@ -8,3 +8,5 @@ After I completed the Kode Kloud courses and mock exams, I moved on to Linux Aca
 ## Resources
 * https://www.ansiblefordevops.com/
 * https://github.com/geerlingguy/ansible-for-devops
+* https://github.com/enginyoyen/ansible-best-practises
+* https://www.ansible.com/hubfs/2018_Content/AA%20BOS%202018%20Slides/Ansible%20Best%20Practices.pdf

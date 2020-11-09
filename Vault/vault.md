@@ -312,6 +312,20 @@ $ cat notsosecretmessage.txt
 abc123
 ```
 
+## Pulling an entire encrypted file into a variable in a playbook
+
+```yaml
+---
+- name: Read in entire encrypted file as a variable
+  hosts: localhost
+  become: yes
+  vars:
+    filecontents: "{{ lookup('file', '~/ansible/files/my_encrytped_file') }}"
+  tasks:
+    - debug:
+        var: filecontents
+```
+
 ## Running a playbook with various data encrypted by multiple vault passwords
 
 Starting files: `passfile_prod`, `sensitiveProdInfo.txt`, `passfile_dev`, `sensitiveDevInfo.txt`
